@@ -35,6 +35,15 @@ const EDITOR_EMAILS = [
   'kgreene@varsity.com',
 ];
 
+const isEditorEmail = (email: string | null): boolean => {
+  if (!email) return false;
+  const normalizedEmail = email.toLowerCase().trim();
+  return EDITOR_EMAILS.some(editorEmail => 
+    normalizedEmail === editorEmail.toLowerCase() ||
+    normalizedEmail.endsWith(editorEmail.toLowerCase())
+  );
+};
+
 /**
  * This factory creates the class which is registered with the tagname in the `custom element registry`
  * Gets the parental class and a set of helper utilities provided by the hosting application.
@@ -57,12 +66,12 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi: WidgetApi) => {
     private async initUserInfo(): Promise<void> {
       try {
         const userInfo = await widgetApi.getUserInformation();
+        console.log('[v0] Staffbase user info:', userInfo);
         if (userInfo) {
-          this._userEmail = (userInfo.publicEmailAddress || '').toLowerCase();
+          this._userEmail = (userInfo.publicEmailAddress || userInfo.email || '').toLowerCase();
           this._userName = userInfo.displayName || userInfo.firstName || 'Anonymous';
-          this._isEditor = EDITOR_EMAILS.some(email => 
-            email.toLowerCase() === this._userEmail
-          );
+          this._isEditor = isEditorEmail(this._userEmail);
+          console.log('[v0] User email:', this._userEmail, 'isEditor:', this._isEditor);
         }
         // Re-render with updated user info
         const container = this.shadowRoot?.querySelector('.widget-container') as HTMLElement;
@@ -70,7 +79,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi: WidgetApi) => {
           this.renderBlock(container);
         }
       } catch (error) {
-        console.error('Failed to get user information:', error);
+        console.error('[v0] Failed to get user information:', error);
       }
     }
 
