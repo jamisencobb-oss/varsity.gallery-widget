@@ -14,7 +14,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { BlockFactory, BlockDefinition, ExternalBlockDefinition, BaseBlock } from "widget-sdk";
+import { BlockFactory, BlockDefinition, ExternalBlockDefinition, BaseBlock, WidgetApi } from "widget-sdk";
 import { PhotoGalleryProps, PhotoGallery } from "./photo-gallery";
 import { configurationSchema, uiSchema } from "./configuration-schema";
 import icon from "../resources/photo-gallery.svg";
@@ -28,18 +28,50 @@ const widgetAttributes: string[] = [
 ];
 
 /**
+ * Editor emails - only these users can edit captions, titles, upload, and delete photos
+ */
+const EDITOR_EMAILS = [
+  'jcobb@varsity.com',
+  'kgreene@varsity.com',
+];
+
+/**
  * This factory creates the class which is registered with the tagname in the `custom element registry`
  * Gets the parental class and a set of helper utilities provided by the hosting application.
  */
-const factory: BlockFactory = (BaseBlockClass, _widgetApi) => {
+const factory: BlockFactory = (BaseBlockClass, widgetApi: WidgetApi) => {
   /**
    *  <photo-gallery message="world!"></photo-gallery>
    */
   return class PhotoGalleryBlock extends BaseBlockClass implements BaseBlock {
     private _root: ReactDOM.Root | null = null;
+    private _userEmail: string | null = null;
+    private _userName: string | null = null;
+    private _isEditor: boolean = false;
 
     public constructor() {
       super();
+      this.initUserInfo();
+    }
+
+    private async initUserInfo(): Promise<void> {
+      try {
+        const userInfo = await widgetApi.getUserInformation();
+        if (userInfo) {
+          this._userEmail = (userInfo.publicEmailAddress || '').toLowerCase();
+          this._userName = userInfo.displayName || userInfo.firstName || 'Anonymous';
+          this._isEditor = EDITOR_EMAILS.some(email => 
+            email.toLowerCase() === this._userEmail
+          );
+        }
+        // Re-render with updated user info
+        const container = this.shadowRoot?.querySelector('.widget-container') as HTMLElement;
+        if (container) {
+          this.renderBlock(container);
+        }
+      } catch (error) {
+        console.error('Failed to get user information:', error);
+      }
     }
 
     private get props(): PhotoGalleryProps {
@@ -47,6 +79,9 @@ const factory: BlockFactory = (BaseBlockClass, _widgetApi) => {
       return {
         ...attrs,
         contentLanguage: this.contentLanguage,
+        userEmail: this._userEmail,
+        userName: this._userName,
+        isEditor: this._isEditor,
       };
     }
 
