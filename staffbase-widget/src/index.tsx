@@ -57,21 +57,41 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi: WidgetApi) => {
     private _userEmail: string | null = null;
     private _userName: string | null = null;
     private _isEditor: boolean = false;
+    private _isEditMode: boolean = false;
 
     public constructor() {
       super();
       this.initUserInfo();
+      this.checkEditMode();
+    }
+
+    private checkEditMode(): void {
+      // Check if we're in Staffbase Studio edit/preview mode
+      // In edit mode, the widget is rendered in an iframe or has specific URL params
+      const isInStudio = window.location.href.includes('staffbase') && 
+        (window.location.href.includes('studio') || 
+         window.location.href.includes('edit') ||
+         window.location.href.includes('preview') ||
+         window.location.href.includes('admin'));
+      
+      // Also check if parent window suggests edit mode
+      const hasEditParam = new URLSearchParams(window.location.search).has('edit');
+      
+      // Check for Staffbase Studio specific indicators
+      const isStudioContext = document.referrer.includes('studio') || 
+        document.referrer.includes('admin') ||
+        window.self !== window.top; // Widget is in an iframe (common in edit mode)
+      
+      this._isEditMode = isInStudio || hasEditParam || isStudioContext;
     }
 
     private async initUserInfo(): Promise<void> {
       try {
         const userInfo = await widgetApi.getUserInformation();
-        console.log('[v0] Staffbase user info:', userInfo);
         if (userInfo) {
-          this._userEmail = (userInfo.publicEmailAddress || userInfo.email || '').toLowerCase();
+          this._userEmail = (userInfo.publicEmailAddress || (userInfo as any).email || '').toLowerCase();
           this._userName = userInfo.displayName || userInfo.firstName || 'Anonymous';
           this._isEditor = isEditorEmail(this._userEmail);
-          console.log('[v0] User email:', this._userEmail, 'isEditor:', this._isEditor);
         }
         // Re-render with updated user info
         const container = this.shadowRoot?.querySelector('.widget-container') as HTMLElement;
@@ -79,7 +99,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi: WidgetApi) => {
           this.renderBlock(container);
         }
       } catch (error) {
-        console.error('[v0] Failed to get user information:', error);
+        console.error('Failed to get user information:', error);
       }
     }
 
@@ -90,7 +110,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi: WidgetApi) => {
         contentLanguage: this.contentLanguage,
         userEmail: this._userEmail,
         userName: this._userName,
-        isEditor: this._isEditor,
+        isEditor: this._isEditor || this._isEditMode, // Allow editing in Studio edit mode
       };
     }
 
