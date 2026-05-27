@@ -15,20 +15,23 @@ import React, { useState, useEffect, useRef, useCallback, ReactElement } from "r
 import { BlockAttributes } from "widget-sdk";
 import { Heart, X, Upload, ImagePlus, Trash2, Pencil, Check, MessageCircle, Send } from "lucide-react";
 
+// API base URL - your Vercel deployment
+const API_BASE = "https://v0-staffbase-image-gallery.vercel.app/api";
+
 interface Comment {
-  id: string;
+  id: number;
   userName: string;
-  userEmail: string;
-  text: string;
-  timestamp: number;
+  userId: string;
+  content: string;
+  createdAt: string;
 }
 
 interface Photo {
-  id: string;
+  id: number;
   url: string;
   caption: string;
-  likes: number;
-  likedBy: string[];
+  created_at: string;
+  like_count: number;
   comments: Comment[];
 }
 
@@ -48,35 +51,38 @@ export const PhotoGallery = ({
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [galleryTitle, setGalleryTitle] = useState(title);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState("");
   const [newComment, setNewComment] = useState("");
+  const [likedPhotos, setLikedPhotos] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const savedPhotos = localStorage.getItem("staffbase-gallery-photos");
-    if (savedPhotos) {
-      const parsed = JSON.parse(savedPhotos);
-      // Migrate old format to new format with likedBy and comments
-      const migrated = parsed.map((p: any) => ({
-        ...p,
-        likedBy: p.likedBy || (p.liked ? ['legacy'] : []),
-        comments: p.comments || [],
-      }));
-      setPhotos(migrated);
+  // Fetch photos from API
+  const fetchPhotos = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/photos`);
+      if (response.ok) {
+        const data = await response.json();
+        setPhotos(data.photos || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch photos:", error);
+    } finally {
+      setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchPhotos();
+    // Load saved title from localStorage (title is per-widget)
     const savedTitle = localStorage.getItem("staffbase-gallery-title");
     if (savedTitle) {
       setGalleryTitle(savedTitle);
     }
-  }, []);
-
-  const savePhotos = useCallback((newPhotos: Photo[]) => {
-    setPhotos(newPhotos);
-    localStorage.setItem("staffbase-gallery-photos", JSON.stringify(newPhotos));
-  }, []);
+  }, [fetchPhotos]);
 
   const startEditingTitle = () => {
     if (!isEditor) return;
@@ -101,87 +107,167 @@ export const PhotoGallery = ({
     if (!isEditor) return;
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    
     setIsUploading(true);
-    const newPhotos: Photo[] = [];
+    
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!file.type.startsWith("image/")) continue;
-      const url = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      newPhotos.push({ 
-        id: `${Date.now()}-${i}`, 
-        url, 
-        caption: "", 
-        likes: 0, 
-        likedBy: [],
-        comments: [] 
-      });
+      
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("caption", "");
+        
+        const response = await fetch(`${API_BASE}/photos`, {
+          method: "POST",
+          body: formData,
+        });
+        
+        if (!response.ok) {
+          throw new Error("Upload failed");
+        }
+      } catch (error) {
+        console.error("Failed to upload photo:", error);
+      }
     }
-    savePhotos([...photos, ...newPhotos]);
+    
+    // Refresh photos after upload
+    await fetchPhotos();
     setIsUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const toggleLike = (photoId: string) => {
+  const toggleLike = async (photoId: number) => {
     if (!userEmail) return;
-    const updated = photos.map((p) => {
-      if (p.id !== photoId) return p;
-      const hasLiked = p.likedBy.includes(userEmail);
-      return {
-        ...p,
-        likedBy: hasLiked 
-          ? p.likedBy.filter(e => e !== userEmail)
-          : [...p.likedBy, userEmail],
-        likes: hasLiked ? p.likes - 1 : p.likes + 1
-      };
-    });
-    savePhotos(updated);
-    if (selectedPhoto?.id === photoId) {
-      setSelectedPhoto(updated.find((p) => p.id === photoId) || null);
+    
+    const hasLiked = likedPhotos.has(photoId);
+    
+    try {
+      const response = await fetch(`${API_BASE}/photos/likes`, {
+        method: hasLiked ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoId, userId: userEmail }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Update local state
+        setLikedPhotos(prev => {
+          const newSet = new Set(prev);
+          if (hasLiked) {
+            newSet.delete(photoId);
+          } else {
+            newSet.add(photoId);
+          }
+          return newSet;
+        });
+        
+        // Update photo like count
+        setPhotos(prev => prev.map(p => 
+          p.id === photoId ? { ...p, like_count: data.likeCount } : p
+        ));
+        
+        if (selectedPhoto?.id === photoId) {
+          setSelectedPhoto(prev => prev ? { ...prev, like_count: data.likeCount } : null);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to toggle like:", error);
     }
   };
 
-  const updateCaption = (photoId: string, caption: string) => {
+  const updateCaption = async (photoId: number, caption: string) => {
     if (!isEditor) return;
     const trimmed = caption.split(/\s+/).slice(0, 10).join(" ");
-    const updated = photos.map((p) => (p.id === photoId ? { ...p, caption: trimmed } : p));
-    savePhotos(updated);
-    if (selectedPhoto?.id === photoId) {
-      setSelectedPhoto(updated.find((p) => p.id === photoId) || null);
+    
+    try {
+      const response = await fetch(`${API_BASE}/photos`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: photoId, caption: trimmed }),
+      });
+      
+      if (response.ok) {
+        setPhotos(prev => prev.map(p => 
+          p.id === photoId ? { ...p, caption: trimmed } : p
+        ));
+        if (selectedPhoto?.id === photoId) {
+          setSelectedPhoto(prev => prev ? { ...prev, caption: trimmed } : null);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update caption:", error);
     }
   };
 
-  const deletePhoto = (photoId: string) => {
+  const deletePhoto = async (photoId: number, url: string) => {
     if (!isEditor) return;
-    const updated = photos.filter((p) => p.id !== photoId);
-    savePhotos(updated);
-    if (selectedPhoto?.id === photoId) setSelectedPhoto(null);
-  };
-
-  const addComment = (photoId: string) => {
-    if (!userEmail || !newComment.trim()) return;
-    const comment: Comment = {
-      id: `${Date.now()}`,
-      userName: userName || 'Anonymous',
-      userEmail: userEmail,
-      text: newComment.trim(),
-      timestamp: Date.now(),
-    };
-    const updated = photos.map((p) => {
-      if (p.id !== photoId) return p;
-      return { ...p, comments: [...p.comments, comment] };
-    });
-    savePhotos(updated);
-    if (selectedPhoto?.id === photoId) {
-      setSelectedPhoto(updated.find((p) => p.id === photoId) || null);
+    
+    try {
+      const response = await fetch(`${API_BASE}/photos`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: photoId, url }),
+      });
+      
+      if (response.ok) {
+        setPhotos(prev => prev.filter(p => p.id !== photoId));
+        if (selectedPhoto?.id === photoId) setSelectedPhoto(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete photo:", error);
     }
-    setNewComment("");
   };
 
-  const hasLiked = (photo: Photo) => userEmail ? photo.likedBy.includes(userEmail) : false;
+  const addComment = async (photoId: number) => {
+    if (!userEmail || !newComment.trim()) return;
+    
+    try {
+      const response = await fetch(`${API_BASE}/photos/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photoId,
+          userId: userEmail,
+          userName: userName || "Anonymous",
+          content: newComment.trim(),
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const newCommentObj = data.comment;
+        
+        setPhotos(prev => prev.map(p => {
+          if (p.id !== photoId) return p;
+          return { ...p, comments: [...p.comments, newCommentObj] };
+        }));
+        
+        if (selectedPhoto?.id === photoId) {
+          setSelectedPhoto(prev => prev ? { 
+            ...prev, 
+            comments: [...prev.comments, newCommentObj] 
+          } : null);
+        }
+        
+        setNewComment("");
+      }
+    } catch (error) {
+      console.error("Failed to add comment:", error);
+    }
+  };
+
+  const hasLiked = (photo: Photo) => likedPhotos.has(photo.id);
+
+  if (isLoading) {
+    return (
+      <div style={{ fontFamily: "system-ui, -apple-system, sans-serif", padding: "16px", background: "#f9fafb", minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "#6b7280" }}>Loading photos...</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ fontFamily: "system-ui, -apple-system, sans-serif", padding: "16px", background: "#f9fafb", minHeight: "100%" }}>
@@ -232,21 +318,21 @@ export const PhotoGallery = ({
               <img src={photo.url} alt={photo.caption || "Photo"} onClick={() => setSelectedPhoto(photo)} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", cursor: "pointer", display: "block" }} />
               <div style={{ padding: "8px" }}>
                 {isEditor ? (
-                  <input type="text" placeholder="Add caption..." value={photo.caption} onChange={(e) => updateCaption(photo.id, e.target.value)} maxLength={60} style={{ width: "100%", fontSize: "11px", border: "none", background: "transparent", color: "#374151", outline: "none", padding: 0, marginBottom: "6px" }} />
+                  <input type="text" placeholder="Add caption..." value={photo.caption || ""} onChange={(e) => updateCaption(photo.id, e.target.value)} maxLength={60} style={{ width: "100%", fontSize: "11px", border: "none", background: "transparent", color: "#374151", outline: "none", padding: 0, marginBottom: "6px" }} />
                 ) : (
                   <p style={{ fontSize: "11px", color: "#374151", margin: "0 0 6px", minHeight: "14px" }}>{photo.caption}</p>
                 )}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <button onClick={() => toggleLike(photo.id)} style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: "pointer", padding: 0, color: hasLiked(photo) ? "#ef4444" : "#9ca3af" }}>
-                      <Heart size={14} fill={hasLiked(photo) ? "#ef4444" : "none"} /><span style={{ fontSize: "12px" }}>{photo.likes}</span>
+                      <Heart size={14} fill={hasLiked(photo) ? "#ef4444" : "none"} /><span style={{ fontSize: "12px" }}>{photo.like_count}</span>
                     </button>
                     <button onClick={() => setSelectedPhoto(photo)} style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#9ca3af" }}>
-                      <MessageCircle size={14} /><span style={{ fontSize: "12px" }}>{photo.comments.length}</span>
+                      <MessageCircle size={14} /><span style={{ fontSize: "12px" }}>{photo.comments?.length || 0}</span>
                     </button>
                   </div>
                   {isEditor && (
-                    <button onClick={() => deletePhoto(photo.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "#9ca3af" }}><Trash2 size={14} /></button>
+                    <button onClick={() => deletePhoto(photo.id, photo.url)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px", color: "#9ca3af" }}><Trash2 size={14} /></button>
                   )}
                 </div>
               </div>
@@ -265,29 +351,29 @@ export const PhotoGallery = ({
             <img src={selectedPhoto.url} alt={selectedPhoto.caption || "Photo"} style={{ width: "100%", maxHeight: "50vh", objectFit: "contain" }} />
             <div style={{ padding: "12px 16px", borderTop: "1px solid #e5e7eb" }}>
               {isEditor ? (
-                <input type="text" placeholder="Add caption..." value={selectedPhoto.caption} onChange={(e) => updateCaption(selectedPhoto.id, e.target.value)} maxLength={60} style={{ width: "100%", fontSize: "14px", border: "none", outline: "none", marginBottom: "8px", color: "#374151" }} />
+                <input type="text" placeholder="Add caption..." value={selectedPhoto.caption || ""} onChange={(e) => updateCaption(selectedPhoto.id, e.target.value)} maxLength={60} style={{ width: "100%", fontSize: "14px", border: "none", outline: "none", marginBottom: "8px", color: "#374151" }} />
               ) : (
                 <p style={{ fontSize: "14px", color: "#374151", margin: "0 0 8px" }}>{selectedPhoto.caption || "No caption"}</p>
               )}
               <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
                 <button onClick={() => toggleLike(selectedPhoto.id)} style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", cursor: "pointer", padding: 0, color: hasLiked(selectedPhoto) ? "#ef4444" : "#6b7280" }}>
-                  <Heart size={18} fill={hasLiked(selectedPhoto) ? "#ef4444" : "none"} /><span style={{ fontSize: "14px" }}>{selectedPhoto.likes} likes</span>
+                  <Heart size={18} fill={hasLiked(selectedPhoto) ? "#ef4444" : "none"} /><span style={{ fontSize: "14px" }}>{selectedPhoto.like_count} likes</span>
                 </button>
-                <span style={{ fontSize: "14px", color: "#6b7280" }}>{selectedPhoto.comments.length} comments</span>
+                <span style={{ fontSize: "14px", color: "#6b7280" }}>{selectedPhoto.comments?.length || 0} comments</span>
               </div>
               
               {/* Comments Section */}
               <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px", maxHeight: "150px", overflowY: "auto" }}>
-                {selectedPhoto.comments.length === 0 ? (
+                {(!selectedPhoto.comments || selectedPhoto.comments.length === 0) ? (
                   <p style={{ fontSize: "12px", color: "#9ca3af", textAlign: "center", margin: "8px 0" }}>No comments yet</p>
                 ) : (
                   selectedPhoto.comments.map((comment) => (
                     <div key={comment.id} style={{ marginBottom: "8px", padding: "8px", background: "#f3f4f6", borderRadius: "6px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                         <span style={{ fontSize: "12px", fontWeight: 600, color: "#374151" }}>{comment.userName}</span>
-                        <span style={{ fontSize: "10px", color: "#9ca3af" }}>{new Date(comment.timestamp).toLocaleDateString()}</span>
+                        <span style={{ fontSize: "10px", color: "#9ca3af" }}>{new Date(comment.createdAt).toLocaleDateString()}</span>
                       </div>
-                      <p style={{ fontSize: "12px", color: "#4b5563", margin: 0 }}>{comment.text}</p>
+                      <p style={{ fontSize: "12px", color: "#4b5563", margin: 0 }}>{comment.content}</p>
                     </div>
                   ))
                 )}
