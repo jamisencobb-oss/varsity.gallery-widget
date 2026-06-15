@@ -23,9 +23,7 @@ import pkg from '../package.json'
 /**
  * Define which attributes are handled by the widget. This should be also reflected in configuration schema
  */
-const widgetAttributes: string[] = [
-  'title',
-];
+const widgetAttributes: string[] = [];
 
 /**
  * Editor emails - only these users can edit captions, titles, upload, and delete photos
@@ -126,7 +124,7 @@ const blockDefinition: BlockDefinition = {
     blockLevel: 'block',
     configurationSchema: configurationSchema,
     uiSchema: uiSchema,
-    label: 'Photo Gallery',
+    label: 'Varsity Social Wall',
     iconUrl: icon
 };
 
