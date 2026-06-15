@@ -43,7 +43,7 @@ export interface PhotoGalleryProps extends BlockAttributes {
 }
 
 export const PhotoGallery = ({ 
-  title = "Photo Gallery", 
+  title = "Varsity Social Wall", 
   userEmail = null,
   userName = "Anonymous",
   isEditor = false 
@@ -92,7 +92,7 @@ export const PhotoGallery = ({
   };
 
   const saveTitle = () => {
-    const newTitle = editingTitleValue.trim() || "Photo Gallery";
+    const newTitle = editingTitleValue.trim() || "Varsity Social Wall";
     setGalleryTitle(newTitle);
     localStorage.setItem("staffbase-gallery-title", newTitle);
     setIsEditingTitle(false);

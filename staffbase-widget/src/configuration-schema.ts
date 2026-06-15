@@ -22,8 +22,8 @@ export const configurationSchema: JSONSchema7 = {
   properties: {
     title: {
       type: "string",
-      title: "Gallery Title",
-      default: "Photo Gallery",
+      title: "Wall Title",
+      default: "Varsity Social Wall",
     },
   },
 };
@@ -34,6 +34,6 @@ export const configurationSchema: JSONSchema7 = {
  */
 export const uiSchema: UiSchema = {
   title: {
-    "ui:help": "Enter a title for your photo gallery",
+    "ui:help": "Enter a title for your social wall",
   },
 };

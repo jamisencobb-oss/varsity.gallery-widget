@@ -126,7 +126,7 @@ const blockDefinition: BlockDefinition = {
     blockLevel: 'block',
     configurationSchema: configurationSchema,
     uiSchema: uiSchema,
-    label: 'Photo Gallery',
+    label: 'Varsity Social Wall',
     iconUrl: icon
 };
 
