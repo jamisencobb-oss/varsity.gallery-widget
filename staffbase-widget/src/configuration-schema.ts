@@ -19,21 +19,11 @@ import { JSONSchema7 } from "json-schema";
  * see https://rjsf-team.github.io/react-jsonschema-form/docs/ for documentation
  */
 export const configurationSchema: JSONSchema7 = {
-  properties: {
-    title: {
-      type: "string",
-      title: "Wall Title",
-      default: "Varsity Social Wall",
-    },
-  },
+  properties: {},
 };
 
 /**
  * schema to add more customization to the form's look and feel
  * @see https://rjsf-team.github.io/react-jsonschema-form/docs/api-reference/uiSchema
  */
-export const uiSchema: UiSchema = {
-  title: {
-    "ui:help": "Enter a title for your social wall",
-  },
-};
+export const uiSchema: UiSchema = {};
