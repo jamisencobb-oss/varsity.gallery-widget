@@ -13,7 +13,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, ReactElement } from "react";
 import { BlockAttributes } from "widget-sdk";
-import { Heart, X, Upload, ImagePlus, Trash2, Pencil, Check, MessageCircle, Send } from "lucide-react";
+import { Heart, X, Upload, ImagePlus, Trash2, MessageCircle, Send } from "lucide-react";
 
 // API base URL - your Vercel deployment
 const API_BASE = "https://v0-staffbase-image-gallery.vercel.app/api";
@@ -43,7 +43,6 @@ export interface PhotoGalleryProps extends BlockAttributes {
 }
 
 export const PhotoGallery = ({ 
-  title = "Varsity Social Wall", 
   userEmail = null,
   userName = "Anonymous",
   isEditor = false 
@@ -52,13 +51,9 @@ export const PhotoGallery = ({
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [galleryTitle, setGalleryTitle] = useState(title);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editingTitleValue, setEditingTitleValue] = useState("");
   const [newComment, setNewComment] = useState("");
   const [likedPhotos, setLikedPhotos] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch photos from API
   const fetchPhotos = useCallback(async () => {
@@ -77,31 +72,7 @@ export const PhotoGallery = ({
 
   useEffect(() => {
     fetchPhotos();
-    // Load saved title from localStorage (title is per-widget)
-    const savedTitle = localStorage.getItem("staffbase-gallery-title");
-    if (savedTitle) {
-      setGalleryTitle(savedTitle);
-    }
   }, [fetchPhotos]);
-
-  const startEditingTitle = () => {
-    if (!isEditor) return;
-    setEditingTitleValue(galleryTitle);
-    setIsEditingTitle(true);
-    setTimeout(() => titleInputRef.current?.focus(), 0);
-  };
-
-  const saveTitle = () => {
-    const newTitle = editingTitleValue.trim() || "Varsity Social Wall";
-    setGalleryTitle(newTitle);
-    localStorage.setItem("staffbase-gallery-title", newTitle);
-    setIsEditingTitle(false);
-  };
-
-  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") saveTitle();
-    else if (e.key === "Escape") setIsEditingTitle(false);
-  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isEditor) return;
@@ -276,19 +247,7 @@ export const PhotoGallery = ({
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {isEditingTitle && isEditor ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <input ref={titleInputRef} type="text" value={editingTitleValue} onChange={(e) => setEditingTitleValue(e.target.value)} onKeyDown={handleTitleKeyDown} onBlur={saveTitle} maxLength={40} style={{ fontSize: "18px", fontWeight: 600, padding: "4px 8px", border: "1px solid #d1d5db", borderRadius: "6px", outline: "none" }} />
-              <button onClick={saveTitle} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6b7280" }}><Check size={16} /></button>
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h1 style={{ fontSize: "18px", fontWeight: 600, margin: 0, color: "#111827" }}>{galleryTitle}</h1>
-              {isEditor && (
-                <button onClick={startEditingTitle} title="Edit title" style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", color: "#6b7280" }}><Pencil size={16} /></button>
-              )}
-            </div>
-          )}
+          <h1 style={{ fontSize: "18px", fontWeight: 600, margin: 0, color: "#111827" }}>Varsity Social Wall</h1>
         </div>
         {isEditor && (
           <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 12px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: isUploading ? "not-allowed" : "pointer", fontSize: "14px", fontWeight: 500, opacity: isUploading ? 0.7 : 1 }}>
